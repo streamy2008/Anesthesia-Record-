@@ -1,0 +1,5 @@
+{
+  "name": "无痛胃肠镜麻醉记录系统",
+  "description": "基于WS 329-2024标准的无痛胃肠镜麻醉专用电子记录单，支持语音录入与PDF导出。",
+  "requestFramePermissions": ["microphone", "camera"]
+}
