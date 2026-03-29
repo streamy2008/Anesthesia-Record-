@@ -296,8 +296,19 @@ export default function App() {
       }
       
       const fileName = `麻醉记录单_${data.name || '未命名'}_${data.date}.pdf`;
-      pdf.save(fileName);
       
+      // Generate Blob for preview
+      const blob = pdf.output('blob');
+      const url = URL.createObjectURL(blob);
+      
+      // Attempt to open in new window
+      const previewWindow = window.open(url, '_blank');
+      
+      // Fallback if window is blocked
+      if (!previewWindow || previewWindow.closed || typeof previewWindow.closed === 'undefined') {
+        console.warn("Preview window blocked, falling back to direct download");
+        pdf.save(fileName);
+      }
     } catch (error) {
       console.error("PDF generation failed:", error);
       alert(`PDF 生成失败: ${error instanceof Error ? error.message : '未知错误'}。请确保浏览器未禁用相关权限并重试。`);
