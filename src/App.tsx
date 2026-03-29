@@ -189,6 +189,7 @@ export default function App() {
   const [data, setData] = useState<FormData>(initialData);
   const [activeSection, setActiveSection] = useState<string>('basic');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [scannerTitle, setScannerTitle] = useState('扫描患者手环');
   const [scannerCallback, setScannerCallback] = useState<(text: string) => void>(() => {});
   const printRef = useRef<HTMLDivElement>(null);
@@ -238,42 +239,65 @@ export default function App() {
   };
 
   const exportPDF = async () => {
-    if (!printRef.current) return;
+    if (!printRef.current || isExporting) return;
     
-    // Use a more robust way to "show" for capture without flickering at the bottom
+    setIsExporting(true);
     const printContainer = printRef.current.parentElement;
+    
+    // Ensure the container is "visible" to html2canvas but off-screen
     if (printContainer) {
       printContainer.style.display = 'block';
+      printContainer.style.visibility = 'visible';
       printContainer.style.position = 'fixed';
       printContainer.style.top = '0';
       printContainer.style.left = '-10000px';
       printContainer.style.zIndex = '-1';
     }
 
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pages = printRef.current.querySelectorAll('.print-page');
-    
-    for (let i = 0; i < pages.length; i++) {
-      const canvas = await html2canvas(pages[i] as HTMLElement, { 
-        scale: 2,
-        useCORS: true,
-        logging: false
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    try {
+      // Small delay to ensure DOM is ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pages = printRef.current.querySelectorAll('.print-page');
       
-      if (i > 0) pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      if (pages.length === 0) {
+        throw new Error("No print pages found");
+      }
+
+      for (let i = 0; i < pages.length; i++) {
+        const canvas = await html2canvas(pages[i] as HTMLElement, { 
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: true, // Enable logging for debugging
+          backgroundColor: '#ffffff',
+          windowWidth: 1200 // Ensure consistent width for capture
+        });
+        
+        const imgData = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG for smaller size
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      }
+      
+      const fileName = `麻醉记录单_${data.name || '未命名'}_${data.date}.pdf`;
+      
+      // Try saving directly first as it's more reliable than window.open in iframes
+      pdf.save(fileName);
+      
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+      alert("PDF 生成失败，请检查浏览器权限或重试。");
+    } finally {
+      if (printContainer) {
+        printContainer.style.display = 'none';
+        printContainer.style.visibility = 'hidden';
+      }
+      setIsExporting(false);
     }
-    
-    if (printContainer) {
-      printContainer.style.display = 'none';
-    }
-    
-    const blob = pdf.output('blob');
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
   };
 
   const handlePatientScan = (text: string) => {
@@ -416,10 +440,19 @@ export default function App() {
         </div>
         <button 
           onClick={exportPDF}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
+          disabled={isExporting}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all shadow-sm ${
+            isExporting 
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
         >
-          <Download size={18} />
-          <span>导出 PDF</span>
+          {isExporting ? (
+            <div className="w-4 h-4 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin"></div>
+          ) : (
+            <Download size={18} />
+          )}
+          <span>{isExporting ? '正在生成...' : '导出 PDF'}</span>
         </button>
       </header>
 
@@ -1059,8 +1092,8 @@ export default function App() {
         )}
       </main>
 
-      {/* Hidden Print Content */}
-      <div className="hidden">
+      {/* Hidden Print Content - Use visibility hidden instead of display none for better capture */}
+      <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', visibility: 'hidden' }}>
         <div ref={printRef} className="print-root">
           {/* Page 1: Main Record */}
           <div className="print-page w-[210mm] h-[297mm] p-[15mm] bg-white text-[9pt] leading-tight font-serif relative overflow-hidden">
