@@ -290,64 +290,129 @@ export default function App() {
               clonedPage.style.display = 'block';
               clonedPage.style.visibility = 'visible';
               
-              // Nuclear Fix for html2canvas oklch error:
-              // 1. Remove ALL existing style and link tags from the cloned document
-              const allStyles = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]');
-              allStyles.forEach(s => s.remove());
-
-              // 2. Inject ONLY the necessary print styles with safe hex colors
-              const safeStyle = clonedDoc.createElement('style');
-              safeStyle.innerHTML = `
-                .print-root { background-color: #f1f5f9; padding: 20px 0; color: #000000; font-family: serif; }
-                .print-page { 
-                  width: 210mm; height: 297mm; padding: 15mm; margin: 0 auto 20px auto; 
-                  background: white; position: relative; box-sizing: border-box; 
-                  font-size: 9pt; line-height: 1.2; color: #000000;
+              // Robust Fix for html2canvas oklch error:
+              // Instead of removing all styles, we surgically replace oklch with hex
+              // to preserve the layout while avoiding the parser crash.
+              
+              // 1. Process all style tags
+              const styleTags = clonedDoc.querySelectorAll('style');
+              styleTags.forEach(tag => {
+                try {
+                  // Replace oklch(...) with a safe hex color. 
+                  // We use a regex that matches oklch and its arguments.
+                  tag.innerHTML = tag.innerHTML.replace(/oklch\([^)]+\)/g, (match) => {
+                    // Map common oklch values to hex if possible, or default to black/white
+                    if (match.includes('1 0 0')) return '#ffffff'; // white
+                    if (match.includes('0 0 0')) return '#000000'; // black
+                    return '#000000'; // default to black for borders/text
+                  });
+                } catch (e) {
+                  console.error("Error processing style tag:", e);
                 }
-                .print-page * { border-color: #000000 !important; color: #000000 !important; box-sizing: border-box; }
+              });
+
+              // 2. Process all elements with inline styles
+              const allElements = clonedDoc.querySelectorAll('*');
+              allElements.forEach(el => {
+                const htmlEl = el as HTMLElement;
+                if (htmlEl.style) {
+                  // Check common color properties
+                  ['color', 'backgroundColor', 'borderColor', 'outlineColor'].forEach(prop => {
+                    const val = (htmlEl.style as any)[prop];
+                    if (val && typeof val === 'string' && val.includes('oklch')) {
+                      (htmlEl.style as any)[prop] = prop === 'backgroundColor' ? '#ffffff' : '#000000';
+                    }
+                  });
+                }
+              });
+
+              // 3. Inject specific layout fixes for the print template
+              const layoutFixTag = clonedDoc.createElement('style');
+              layoutFixTag.innerHTML = `
+                @font-face {
+                  font-family: 'SimSun';
+                  src: local('SimSun'), local('STSong');
+                }
+                
+                /* Nuclear reset for colors and variables to prevent black boxes */
+                :root {
+                  --color-slate-50: #f8fafc !important;
+                  --color-slate-100: #f1f5f9 !important;
+                  --color-slate-200: #e2e8f0 !important;
+                  --color-blue-50: #eff6ff !important;
+                  --color-blue-600: #2563eb !important;
+                }
+
+                .print-page {
+                  font-family: 'SimSun', serif !important;
+                  color: #000000 !important;
+                  background-color: #ffffff !important;
+                  -webkit-font-smoothing: antialiased;
+                  box-shadow: none !important;
+                }
+
+                /* Force all backgrounds to be safe hex or transparent */
+                .print-page * {
+                  border-color: #000000 !important;
+                  color: #000000 !important;
+                  box-shadow: none !important;
+                  outline: none !important;
+                  filter: none !important;
+                  backdrop-filter: none !important;
+                }
+
+                .bg-slate-50, [class*="bg-slate-50"] { background-color: #f8fafc !important; }
+                .bg-slate-100, [class*="bg-slate-100"] { background-color: #f1f5f9 !important; }
+                .bg-blue-50, [class*="bg-blue-50"] { background-color: #eff6ff !important; }
+                
                 .grid { display: grid !important; }
-                .grid-cols-10 { grid-template-columns: repeat(10, minmax(0, 1fr)) !important; }
-                .col-span-1 { grid-column: span 1 / span 1 !important; }
-                .col-span-2 { grid-column: span 2 / span 2 !important; }
-                .col-span-3 { grid-column: span 3 / span 3 !important; }
-                .col-span-4 { grid-column: span 4 / span 4 !important; }
-                .col-span-5 { grid-column: span 5 / span 5 !important; }
-                .col-span-6 { grid-column: span 6 / span 6 !important; }
-                .col-span-7 { grid-column: span 7 / span 7 !important; }
-                .col-span-8 { grid-column: span 8 / span 8 !important; }
-                .col-span-9 { grid-column: span 9 / span 9 !important; }
-                .col-span-10 { grid-column: span 10 / span 10 !important; }
                 .flex { display: flex !important; }
-                .justify-between { justify-content: space-between !important; }
-                .justify-end { justify-content: flex-end !important; }
-                .items-center { align-items: center !important; }
-                .border { border: 1px solid #000000 !important; }
-                .border-t { border-top: 1px solid #000000 !important; }
-                .border-l { border-left: 1px solid #000000 !important; }
-                .border-b { border-bottom: 1px solid #000000 !important; }
-                .border-r { border-right: 1px solid #000000 !important; }
-                .border-black { border-color: #000000 !important; }
-                .text-center { text-align: center !important; }
-                .text-right { text-align: right !important; }
-                .font-bold { font-weight: bold !important; }
-                .text-lg { font-size: 1.125rem !important; }
-                .text-2xl { font-size: 1.5rem !important; }
-                .tracking-[0.5em] { letter-spacing: 0.5em !important; }
-                .p-1 { padding: 0.25rem !important; }
-                .mt-1 { margin-top: 0.25rem !important; }
-                .mt-4 { margin-top: 1rem !important; }
-                .mb-4 { margin-bottom: 1rem !important; }
-                .bg-slate-50 { background-color: #f8fafc !important; }
-                .bg-blue-50 { background-color: #eff6ff !important; }
-                .w-full { width: 100% !important; }
-                .h-full { height: 100% !important; }
-                .relative { position: relative !important; }
-                .absolute { position: absolute !important; }
-                .top-0 { top: 0 !important; }
-                .left-0 { left: 0 !important; }
-                .overflow-hidden { overflow: hidden !important; }
+                
+                /* Fix for the sidebar and main area */
+                .print-page .sidebar-meds {
+                  width: 45mm !important;
+                  min-width: 45mm !important;
+                  background-color: #ffffff !important;
+                }
+                
+                /* Fix for time markers alignment */
+                .print-page .time-markers-container {
+                  padding-left: 10% !important;
+                  padding-right: 7.5% !important;
+                  display: flex !important;
+                  justify-content: space-between !important;
+                  width: 100% !important;
+                  background-color: #ffffff !important;
+                }
+                
+                /* Fix for overlapping lines */
+                .print-page .font-bold.border-b {
+                  border-bottom: 1px solid #000000 !important;
+                  padding-bottom: 2px !important;
+                  margin-bottom: 4px !important;
+                  display: block !important;
+                }
+                
+                /* Ensure chart SVGs are clean */
+                .print-page svg {
+                  width: 100% !important;
+                  height: auto !important;
+                  max-height: 35mm !important;
+                }
+                
+                .print-page .notes-section {
+                  border-top: 1px solid #000000 !important;
+                  margin-top: 10px !important;
+                  padding-top: 5px !important;
+                }
+
+                /* Fix for the signature boxes at the bottom */
+                .print-page .grid-cols-5 {
+                  grid-template-columns: repeat(5, 1fr) !important;
+                  gap: 5px !important;
+                }
               `;
-              clonedDoc.head.appendChild(safeStyle);
+              clonedDoc.head.appendChild(layoutFixTag);
             }
           }
         });
@@ -1243,34 +1308,36 @@ export default function App() {
             </div>
 
             {/* Main Record Area */}
-            <div className="mt-4 border border-black h-[140mm] flex">
+            <div className="mt-4 border border-black h-[140mm] flex overflow-hidden">
               {/* Left: Meds/Fluids Labels */}
-              <div className="w-[40mm] border-r border-black flex flex-col">
+              <div className="w-[45mm] border-r border-black flex flex-col sidebar-meds">
                 <div className="h-8 border-b border-black bg-slate-50 flex items-center justify-center font-bold">时间 (min)</div>
-                <div className="flex-1 p-1">
+                <div className="flex-1 p-1 overflow-hidden">
                   <div className="font-bold border-b border-black mb-1">麻醉药/液体:</div>
-                  {data.meds.map((m, i) => (
-                    <div key={i} className="text-[7pt] truncate">{m.name}</div>
-                  ))}
+                  <div className="space-y-0.5">
+                    {data.meds.map((m, i) => (
+                      <div key={i} className="text-[7pt] leading-tight break-all">{m.name}</div>
+                    ))}
+                  </div>
                   <div className="mt-4 font-bold border-b border-black mb-1">出量:</div>
                   <div className="text-[7pt]">出血量: {data.events.includes('出血') ? '见备注' : '0'}ml</div>
                   <div className="text-[7pt]">尿量: {data.events.includes('尿量') ? '见备注' : '0'}ml</div>
                 </div>
               </div>
               {/* Right: Chart Area */}
-              <div className="flex-1 flex flex-col">
-                <div className="h-8 border-b border-black flex items-center px-2">
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="h-8 border-b border-black flex items-center">
                   {/* Time markers placeholder */}
-                  <div className="flex justify-between w-full text-[7pt]">
+                  <div className="time-markers-container text-[8pt] font-bold">
                     <span>0</span><span>15</span><span>30</span><span>45</span><span>60</span><span>75</span><span>90</span>
                   </div>
                 </div>
-                <div className="flex-1 p-2 relative flex flex-col">
-                  <div className="flex-1">
+                <div className="flex-1 p-2 relative flex flex-col vital-signs-chart-container">
+                  <div className="flex-1 min-h-0">
                     <VitalSignsChart data={data.vitals} onChange={() => {}} readOnly={true} />
                   </div>
                   {/* Legend for Chart */}
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[7pt] border-t border-black pt-1">
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[7pt] border-t border-black pt-1 bg-white">
                     <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#ef4444]"></span> 心率 (HR)</div>
                     <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f97316]"></span> 血压 (BP)</div>
                     <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b82f6]"></span> 血氧 (SpO2)</div>
@@ -1283,8 +1350,8 @@ export default function App() {
             </div>
 
             {/* Notes Section */}
-            <div className="mt-4 border border-black p-2 h-[30mm]">
-              <div className="font-bold border-b border-black mb-1">备注/不良事件:</div>
+            <div className="mt-4 border border-black p-2 h-[30mm] notes-section">
+              <div className="font-bold border-b border-black mb-1 pb-1">备注/不良事件:</div>
               <div className="text-[8pt]">
                 {data.events.length > 0 && `事件: ${data.events.join(', ')}. `}
                 {data.eventDesc && `描述: ${data.eventDesc}. `}
@@ -1322,36 +1389,36 @@ export default function App() {
             </div>
           </div>
 
-          {/* Page 2: Supplemental Details */}
-          <div className="print-page w-[210mm] h-[297mm] p-[15mm] bg-white text-[9pt] leading-tight font-serif relative overflow-hidden mt-8">
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-bold">麻醉记录 (续页)</h2>
-              <div className="flex justify-end text-[8pt] mt-1">第 2 页</div>
-            </div>
+            {/* Page 2: Supplemental Details */}
+            <div className="print-page w-[210mm] h-[297mm] p-[15mm] bg-white text-[9pt] leading-tight font-serif relative overflow-hidden mt-8">
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-bold">麻醉记录 (续页)</h2>
+                <div className="flex justify-end text-[8pt] mt-1">第 2 页</div>
+              </div>
 
-            <div className="space-y-6">
-              {/* Anesthesia Method Details */}
-              <div className="border border-black">
-                <div className="bg-slate-100 p-1 font-bold border-b border-black">麻醉方法详情</div>
-                <div className="p-2 grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="font-bold underline mb-1">全身麻醉</div>
-                    <div className="space-y-1 text-[8pt]">
-                      <div>诱导方式: 静脉诱导</div>
-                      <div>气管插管: {data.ventilation}</div>
-                      <div>维持方式: {data.anesthesiaMethod}</div>
+              <div className="space-y-4">
+                {/* Anesthesia Method Details */}
+                <div className="border border-black">
+                  <div className="bg-slate-100 p-1 font-bold border-b border-black">麻醉方法详情</div>
+                  <div className="p-2 grid grid-cols-2 gap-4">
+                    <div className="border-r border-slate-200 pr-4">
+                      <div className="font-bold underline mb-1">全身麻醉</div>
+                      <div className="space-y-1 text-[8pt]">
+                        <div className="flex justify-between"><span>诱导方式:</span> <span>静脉诱导</span></div>
+                        <div className="flex justify-between"><span>气管插管:</span> <span>{data.ventilation}</span></div>
+                        <div className="flex justify-between"><span>维持方式:</span> <span>{data.anesthesiaMethod}</span></div>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="font-bold underline mb-1">监测与通路</div>
-                    <div className="space-y-1 text-[8pt]">
-                      <div>通气模式: {data.ventilation}</div>
-                      <div>FiO₂: {data.fio2}%</div>
-                      <div>氧流量: {data.oxygenFlow} L/min</div>
+                    <div>
+                      <div className="font-bold underline mb-1">监测与通路</div>
+                      <div className="space-y-1 text-[8pt]">
+                        <div className="flex justify-between"><span>通气模式:</span> <span>{data.ventilation}</span></div>
+                        <div className="flex justify-between"><span>FiO₂:</span> <span>{data.fio2}%</span></div>
+                        <div className="flex justify-between"><span>氧流量:</span> <span>{data.oxygenFlow} L/min</span></div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
               {/* Recovery & Discharge */}
               <div className="border border-black">
