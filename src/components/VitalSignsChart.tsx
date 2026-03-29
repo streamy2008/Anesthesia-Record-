@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
+import { Check, X } from 'lucide-react';
 
 interface VitalSign {
   time: string;
@@ -14,6 +15,8 @@ interface VitalSign {
 interface VitalSignsChartProps {
   data: VitalSign[];
   onChange: (index: number, field: keyof VitalSign, value: string) => void;
+  onBulkChange?: (newData: VitalSign[]) => void;
+  readOnly?: boolean;
 }
 
 interface ChartConfig {
@@ -24,7 +27,46 @@ interface ChartConfig {
   unit: string;
 }
 
-export function VitalSignsChart({ data, onChange }: VitalSignsChartProps) {
+export function VitalSignsChart({ data, onChange, onBulkChange, readOnly }: VitalSignsChartProps) {
+  const [tempData, setTempData] = useState<VitalSign[]>(data);
+  const [isModified, setIsModified] = useState(false);
+
+  useEffect(() => {
+    setTempData(data);
+    setIsModified(false);
+  }, [data]);
+
+  const handleTempChange = (index: number, field: keyof VitalSign, value: string) => {
+    const newData = [...tempData];
+    newData[index] = { ...newData[index], [field]: value };
+    setTempData(newData);
+    setIsModified(true);
+  };
+
+  const handleConfirm = () => {
+    if (onBulkChange) {
+      onBulkChange(tempData);
+    } else {
+      // Fallback to individual changes if onBulkChange not provided
+      tempData.forEach((item, index) => {
+        if (JSON.stringify(item) !== JSON.stringify(data[index])) {
+          Object.keys(item).forEach((key) => {
+            const field = key as keyof VitalSign;
+            if (item[field] !== data[index][field]) {
+              onChange(index, field, item[field]);
+            }
+          });
+        }
+      });
+    }
+    setIsModified(false);
+  };
+
+  const handleCancel = () => {
+    setTempData(data);
+    setIsModified(false);
+  };
+
   const configs: ChartConfig[] = [
     { title: '心率 (HR)', field: 'hr', color: '#ef4444', domain: [0, 200], unit: 'bpm' },
     { title: '血压 (BP)', field: 'bp', color: '#f97316', domain: [0, 200], unit: 'mmHg' },
@@ -33,24 +75,43 @@ export function VitalSignsChart({ data, onChange }: VitalSignsChartProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {configs.map((config) => (
-        <div key={config.field} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-1">
-            <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: config.color }}></div>
-              {config.title}
-            </h4>
-            <span className="text-[10px] text-slate-400">{config.unit}</span>
-          </div>
-          <SingleChart config={config} data={data} onChange={onChange} />
+    <div className="space-y-4">
+      {isModified && !readOnly && (
+        <div className="flex items-center justify-end gap-2 bg-blue-50 p-2 rounded-lg border border-blue-100 animate-in fade-in slide-in-from-top-2">
+          <span className="text-xs text-blue-600 font-medium mr-auto pl-2">监测数据已修改，请确认保存</span>
+          <button
+            onClick={handleCancel}
+            className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-colors"
+          >
+            <X size={14} /> 取消
+          </button>
+          <button
+            onClick={handleConfirm}
+            className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Check size={14} /> 确认修改
+          </button>
         </div>
-      ))}
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {configs.map((config) => (
+          <div key={config.field} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: config.color }}></div>
+                {config.title}
+              </h4>
+              <span className="text-[10px] text-slate-400">{config.unit}</span>
+            </div>
+            <SingleChart config={config} data={tempData} onChange={handleTempChange} readOnly={readOnly} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function SingleChart({ config, data, onChange }: { config: ChartConfig, data: VitalSign[], onChange: any }) {
+function SingleChart({ config, data, onChange, readOnly }: { config: ChartConfig, data: VitalSign[], onChange: any, readOnly?: boolean }) {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -101,6 +162,7 @@ function SingleChart({ config, data, onChange }: { config: ChartConfig, data: Vi
 
     const drag = d3.drag<SVGCircleElement, any>()
       .on('drag', function (event, d) {
+        if (readOnly) return;
         const index = d.index;
         const newValue = Math.round(y.invert(event.y));
         const clampedValue = Math.max(config.domain[0], Math.min(config.domain[1], newValue));
@@ -150,8 +212,8 @@ function SingleChart({ config, data, onChange }: { config: ChartConfig, data: Vi
           .attr('cy', y(bp.sys))
           .attr('r', 4)
           .attr('fill', config.color)
-          .attr('cursor', 'ns-resize')
-          .call(drag as any);
+          .attr('cursor', readOnly ? 'default' : 'ns-resize')
+          .call(readOnly ? () => {} : drag as any);
 
         g.append('circle')
           .datum({ index: i, type: 'dia' })
@@ -159,8 +221,8 @@ function SingleChart({ config, data, onChange }: { config: ChartConfig, data: Vi
           .attr('cy', y(bp.dia))
           .attr('r', 4)
           .attr('fill', config.color)
-          .attr('cursor', 'ns-resize')
-          .call(drag as any);
+          .attr('cursor', readOnly ? 'default' : 'ns-resize')
+          .call(readOnly ? () => {} : drag as any);
       });
     } else {
       // Single Line
@@ -183,12 +245,12 @@ function SingleChart({ config, data, onChange }: { config: ChartConfig, data: Vi
           .attr('cy', y(val))
           .attr('r', 4)
           .attr('fill', config.color)
-          .attr('cursor', 'ns-resize')
-          .call(drag as any);
+          .attr('cursor', readOnly ? 'default' : 'ns-resize')
+          .call(readOnly ? () => {} : drag as any);
       });
     }
 
-  }, [data, onChange, config]);
+  }, [data, onChange, config, readOnly]);
 
   return (
     <div className="w-full overflow-hidden">

@@ -135,6 +135,7 @@ interface FormData {
   dischargeOrdersOther: string;
   handoverAnesthetist: string;
   handoverReceiver: string;
+  hospitalName: string;
   // Quality Control Overrides
   qcOverrides: {
     [key: string]: 'pass' | 'fail' | null;
@@ -178,6 +179,7 @@ const initialData: FormData = {
   aldrete: { activity: '2', resp: '2', circ: '2', cons: '2', spo2: '2', total: '10' },
   nrs: '0', ponv: '无', dischargeOrders: ['专人陪护', '不适随诊', '24小时内禁止驾车/高空作业'], dischargeOrdersOther: '',
   handoverAnesthetist: '', handoverReceiver: '',
+  hospitalName: 'XX 医院',
   qcOverrides: {}
 };
 
@@ -260,7 +262,15 @@ export default function App() {
     }
     
     if (printContainer) printContainer.classList.add('hidden');
-    pdf.save(`麻醉记录单_${data.name || '未命名'}_${data.date}.pdf`);
+    
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      const blob = pdf.output('blob');
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } else {
+      pdf.save(`麻醉记录单_${data.name || '未命名'}_${data.date}.pdf`);
+    }
   };
 
   const handlePatientScan = (text: string) => {
@@ -396,7 +406,10 @@ export default function App() {
           <div className="bg-blue-600 p-2 rounded-lg text-white">
             <FileText size={20} />
           </div>
-          <h1 className="text-lg font-bold text-slate-800">无痛胃肠镜麻醉记录</h1>
+          <div className="flex flex-col">
+            <h1 className="text-lg font-bold text-slate-800 leading-tight">{data.hospitalName}</h1>
+            <span className="text-xs text-slate-500 font-medium">无痛胃肠镜麻醉记录</span>
+          </div>
         </div>
         <button 
           onClick={exportPDF}
@@ -427,6 +440,10 @@ export default function App() {
         </div>
         {activeSection === 'basic' && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-xl shadow-sm mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2 space-y-1">
+              <label className="text-sm font-medium text-slate-600">医院名称</label>
+              <VoiceInput value={data.hospitalName} onChange={(v) => updateData('hospitalName', v)} placeholder="输入医院名称" />
+            </div>
             <div className="space-y-1">
               <label className="text-sm font-medium text-slate-600">患者姓名</label>
               <VoiceInput value={data.name} onChange={(v) => updateData('name', v)} placeholder="输入姓名" />
@@ -665,9 +682,13 @@ export default function App() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-slate-800 font-bold border-l-4 border-blue-600 pl-2">
                 <LineChart size={18} />
-                <h3>生理参数趋势图</h3>
+                <h3>术中监测</h3>
               </div>
-              <VitalSignsChart data={data.vitals} onChange={handleVitalChange} />
+              <VitalSignsChart 
+                data={data.vitals} 
+                onChange={handleVitalChange} 
+                onBulkChange={(newData) => updateData('vitals', newData)} 
+              />
             </div>
 
             {/* Vital Signs Table */}
@@ -1041,7 +1062,7 @@ export default function App() {
           {/* Page 1: Main Record */}
           <div className="print-page w-[210mm] h-[297mm] p-[15mm] bg-white text-[9pt] leading-tight font-serif relative overflow-hidden">
             <div className="text-center mb-4">
-              <h1 className="text-lg font-bold">XX 医院</h1>
+              <h1 className="text-lg font-bold">{data.hospitalName}</h1>
               <h2 className="text-2xl font-bold tracking-[0.5em] mt-1">麻醉记录</h2>
               <div className="flex justify-end text-[8pt] mt-1">第 1 页</div>
             </div>
@@ -1121,7 +1142,7 @@ export default function App() {
                 </div>
                 <div className="flex-1 p-2 relative flex flex-col">
                   <div className="flex-1">
-                    <VitalSignsChart data={data.vitals} onChange={() => {}} />
+                    <VitalSignsChart data={data.vitals} onChange={() => {}} readOnly={true} />
                   </div>
                   {/* Legend for Chart */}
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[7pt] border-t border-black pt-1">
