@@ -290,42 +290,64 @@ export default function App() {
               clonedPage.style.display = 'block';
               clonedPage.style.visibility = 'visible';
               
-              // Fix for html2canvas not supporting oklch colors (Tailwind v4 default)
-              // 1. Iterate through all style tags and replace oklch with hex
-              const styleTags = clonedDoc.querySelectorAll('style');
-              styleTags.forEach(tag => {
-                tag.innerHTML = tag.innerHTML.replace(/oklch\([^)]+\)/g, '#000000');
-              });
+              // Nuclear Fix for html2canvas oklch error:
+              // 1. Remove ALL existing style and link tags from the cloned document
+              const allStyles = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]');
+              allStyles.forEach(s => s.remove());
 
-              // 2. Also handle inline styles on all elements
-              const allElements = clonedPage.querySelectorAll('*');
-              allElements.forEach(el => {
-                const htmlEl = el as HTMLElement;
-                if (htmlEl.style.backgroundColor && htmlEl.style.backgroundColor.includes('oklch')) {
-                  htmlEl.style.backgroundColor = '#ffffff';
+              // 2. Inject ONLY the necessary print styles with safe hex colors
+              const safeStyle = clonedDoc.createElement('style');
+              safeStyle.innerHTML = `
+                .print-root { background-color: #f1f5f9; padding: 20px 0; color: #000000; font-family: serif; }
+                .print-page { 
+                  width: 210mm; height: 297mm; padding: 15mm; margin: 0 auto 20px auto; 
+                  background: white; position: relative; box-sizing: border-box; 
+                  font-size: 9pt; line-height: 1.2; color: #000000;
                 }
-                if (htmlEl.style.color && htmlEl.style.color.includes('oklch')) {
-                  htmlEl.style.color = '#000000';
-                }
-                if (htmlEl.style.borderColor && htmlEl.style.borderColor.includes('oklch')) {
-                  htmlEl.style.borderColor = '#000000';
-                }
-              });
-
-              // 3. Inject a specific override for the print page
-              const overrideTag = clonedDoc.createElement('style');
-              overrideTag.innerHTML = `
-                .print-page, .print-page * {
-                  color: #000000 !important;
-                  border-color: #000000 !important;
-                }
-                .print-page {
-                  background-color: #ffffff !important;
-                }
+                .print-page * { border-color: #000000 !important; color: #000000 !important; box-sizing: border-box; }
+                .grid { display: grid !important; }
+                .grid-cols-10 { grid-template-columns: repeat(10, minmax(0, 1fr)) !important; }
+                .col-span-1 { grid-column: span 1 / span 1 !important; }
+                .col-span-2 { grid-column: span 2 / span 2 !important; }
+                .col-span-3 { grid-column: span 3 / span 3 !important; }
+                .col-span-4 { grid-column: span 4 / span 4 !important; }
+                .col-span-5 { grid-column: span 5 / span 5 !important; }
+                .col-span-6 { grid-column: span 6 / span 6 !important; }
+                .col-span-7 { grid-column: span 7 / span 7 !important; }
+                .col-span-8 { grid-column: span 8 / span 8 !important; }
+                .col-span-9 { grid-column: span 9 / span 9 !important; }
+                .col-span-10 { grid-column: span 10 / span 10 !important; }
+                .flex { display: flex !important; }
+                .justify-between { justify-content: space-between !important; }
+                .justify-end { justify-content: flex-end !important; }
+                .items-center { align-items: center !important; }
+                .border { border: 1px solid #000000 !important; }
+                .border-t { border-top: 1px solid #000000 !important; }
+                .border-l { border-left: 1px solid #000000 !important; }
+                .border-b { border-bottom: 1px solid #000000 !important; }
+                .border-r { border-right: 1px solid #000000 !important; }
+                .border-black { border-color: #000000 !important; }
+                .text-center { text-align: center !important; }
+                .text-right { text-align: right !important; }
+                .font-bold { font-weight: bold !important; }
+                .text-lg { font-size: 1.125rem !important; }
+                .text-2xl { font-size: 1.5rem !important; }
+                .tracking-[0.5em] { letter-spacing: 0.5em !important; }
+                .p-1 { padding: 0.25rem !important; }
+                .mt-1 { margin-top: 0.25rem !important; }
+                .mt-4 { margin-top: 1rem !important; }
+                .mb-4 { margin-bottom: 1rem !important; }
                 .bg-slate-50 { background-color: #f8fafc !important; }
                 .bg-blue-50 { background-color: #eff6ff !important; }
+                .w-full { width: 100% !important; }
+                .h-full { height: 100% !important; }
+                .relative { position: relative !important; }
+                .absolute { position: absolute !important; }
+                .top-0 { top: 0 !important; }
+                .left-0 { left: 0 !important; }
+                .overflow-hidden { overflow: hidden !important; }
               `;
-              clonedDoc.head.appendChild(overrideTag);
+              clonedDoc.head.appendChild(safeStyle);
             }
           }
         });
