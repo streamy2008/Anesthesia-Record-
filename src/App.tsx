@@ -240,9 +240,15 @@ export default function App() {
   const exportPDF = async () => {
     if (!printRef.current) return;
     
-    // Temporarily show the hidden print content to capture it
+    // Use a more robust way to "show" for capture without flickering at the bottom
     const printContainer = printRef.current.parentElement;
-    if (printContainer) printContainer.classList.remove('hidden');
+    if (printContainer) {
+      printContainer.style.display = 'block';
+      printContainer.style.position = 'fixed';
+      printContainer.style.top = '0';
+      printContainer.style.left = '-10000px';
+      printContainer.style.zIndex = '-1';
+    }
 
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pages = printRef.current.querySelectorAll('.print-page');
@@ -261,16 +267,13 @@ export default function App() {
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
     }
     
-    if (printContainer) printContainer.classList.add('hidden');
-    
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) {
-      const blob = pdf.output('blob');
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-    } else {
-      pdf.save(`麻醉记录单_${data.name || '未命名'}_${data.date}.pdf`);
+    if (printContainer) {
+      printContainer.style.display = 'none';
     }
+    
+    const blob = pdf.output('blob');
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   };
 
   const handlePatientScan = (text: string) => {
