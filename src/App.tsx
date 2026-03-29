@@ -21,8 +21,8 @@ import {
 import { VoiceInput } from './components/VoiceInput';
 import { SignaturePad } from './components/SignaturePad';
 import { VitalSignsChart } from './components/VitalSignsChart';
+import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 
 // --- Types ---
 
@@ -239,19 +239,25 @@ export default function App() {
   };
 
   const exportPDF = async () => {
-    if (!printRef.current || isExporting) return;
+    console.log("Starting PDF generation...");
+    if (!printRef.current || isExporting) {
+      console.log("Export already in progress or printRef missing");
+      return;
+    }
     
     setIsExporting(true);
     const printContainer = printRef.current.parentElement;
     
     // Use a more reliable "off-screen" but "visible" state
     if (printContainer) {
+      console.log("Showing print container...");
       printContainer.setAttribute('style', 'display: block !important; visibility: visible !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 210mm !important; height: auto !important; z-index: -1000 !important; opacity: 0.01 !important; pointer-events: none !important; background: white !important;');
     }
 
     try {
       // Wait for layout and images to stabilize
-      await new Promise(resolve => setTimeout(resolve, 800));
+      console.log("Waiting for layout stabilization...");
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       const pdf = new jsPDF({
         orientation: 'p',
@@ -261,22 +267,24 @@ export default function App() {
       });
       
       const pages = printRef.current.querySelectorAll('.print-page');
+      console.log(`Found ${pages.length} pages to render`);
       
       if (pages.length === 0) {
         throw new Error("未找到打印页面元素");
       }
 
       for (let i = 0; i < pages.length; i++) {
+        console.log(`Rendering page ${i + 1}...`);
         const pageElement = pages[i] as HTMLElement;
         
         const canvas = await html2canvas(pageElement, { 
           scale: 2,
           useCORS: true,
+          allowTaint: true,
           backgroundColor: '#ffffff',
-          logging: false,
+          logging: true,
           imageTimeout: 15000,
           onclone: (clonedDoc) => {
-            // Ensure the cloned element is visible for capture
             const clonedPage = clonedDoc.querySelector('.print-page') as HTMLElement;
             if (clonedPage) {
               clonedPage.style.display = 'block';
@@ -295,6 +303,7 @@ export default function App() {
         pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
       }
       
+      console.log("PDF generation complete. Opening preview...");
       const fileName = `麻醉记录单_${data.name || '未命名'}_${data.date}.pdf`;
       
       // Generate Blob for preview
@@ -313,6 +322,7 @@ export default function App() {
       console.error("PDF generation failed:", error);
       alert(`PDF 生成失败: ${error instanceof Error ? error.message : '未知错误'}。请确保浏览器未禁用相关权限并重试。`);
     } finally {
+      console.log("Cleaning up...");
       if (printContainer) {
         printContainer.setAttribute('style', 'display: none !important;');
       }
