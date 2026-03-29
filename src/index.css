@@ -15,6 +15,14 @@
 .print-root {
   background-color: #f1f5f9;
   padding: 20px 0;
+  /* Force standard colors for children to avoid html2canvas oklch error */
+  color: #000000;
+}
+
+.print-root * {
+  /* Override any oklch-based colors with standard ones */
+  border-color: #000000;
+  outline-color: #000000;
 }
 
 .print-page {

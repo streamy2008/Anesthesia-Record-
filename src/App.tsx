@@ -289,6 +289,43 @@ export default function App() {
             if (clonedPage) {
               clonedPage.style.display = 'block';
               clonedPage.style.visibility = 'visible';
+              
+              // Fix for html2canvas not supporting oklch colors (Tailwind v4 default)
+              // 1. Iterate through all style tags and replace oklch with hex
+              const styleTags = clonedDoc.querySelectorAll('style');
+              styleTags.forEach(tag => {
+                tag.innerHTML = tag.innerHTML.replace(/oklch\([^)]+\)/g, '#000000');
+              });
+
+              // 2. Also handle inline styles on all elements
+              const allElements = clonedPage.querySelectorAll('*');
+              allElements.forEach(el => {
+                const htmlEl = el as HTMLElement;
+                if (htmlEl.style.backgroundColor && htmlEl.style.backgroundColor.includes('oklch')) {
+                  htmlEl.style.backgroundColor = '#ffffff';
+                }
+                if (htmlEl.style.color && htmlEl.style.color.includes('oklch')) {
+                  htmlEl.style.color = '#000000';
+                }
+                if (htmlEl.style.borderColor && htmlEl.style.borderColor.includes('oklch')) {
+                  htmlEl.style.borderColor = '#000000';
+                }
+              });
+
+              // 3. Inject a specific override for the print page
+              const overrideTag = clonedDoc.createElement('style');
+              overrideTag.innerHTML = `
+                .print-page, .print-page * {
+                  color: #000000 !important;
+                  border-color: #000000 !important;
+                }
+                .print-page {
+                  background-color: #ffffff !important;
+                }
+                .bg-slate-50 { background-color: #f8fafc !important; }
+                .bg-blue-50 { background-color: #eff6ff !important; }
+              `;
+              clonedDoc.head.appendChild(overrideTag);
             }
           }
         });
