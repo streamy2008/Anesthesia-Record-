@@ -244,57 +244,66 @@ export default function App() {
     setIsExporting(true);
     const printContainer = printRef.current.parentElement;
     
-    // Ensure the container is "visible" to html2canvas but off-screen
+    // Use a more reliable "off-screen" but "visible" state
     if (printContainer) {
-      printContainer.style.display = 'block';
-      printContainer.style.visibility = 'visible';
-      printContainer.style.position = 'fixed';
-      printContainer.style.top = '0';
-      printContainer.style.left = '-10000px';
-      printContainer.style.zIndex = '-1';
+      printContainer.setAttribute('style', 'display: block !important; visibility: visible !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 210mm !important; height: auto !important; z-index: -1000 !important; opacity: 0.01 !important; pointer-events: none !important; background: white !important;');
     }
 
     try {
-      // Small delay to ensure DOM is ready
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for layout and images to stabilize
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+      
       const pages = printRef.current.querySelectorAll('.print-page');
       
       if (pages.length === 0) {
-        throw new Error("No print pages found");
+        throw new Error("未找到打印页面元素");
       }
 
       for (let i = 0; i < pages.length; i++) {
-        const canvas = await html2canvas(pages[i] as HTMLElement, { 
+        const pageElement = pages[i] as HTMLElement;
+        
+        const canvas = await html2canvas(pageElement, { 
           scale: 2,
           useCORS: true,
-          allowTaint: true,
-          logging: true, // Enable logging for debugging
           backgroundColor: '#ffffff',
-          windowWidth: 1200 // Ensure consistent width for capture
+          logging: false,
+          imageTimeout: 15000,
+          onclone: (clonedDoc) => {
+            // Ensure the cloned element is visible for capture
+            const clonedPage = clonedDoc.querySelector('.print-page') as HTMLElement;
+            if (clonedPage) {
+              clonedPage.style.display = 'block';
+              clonedPage.style.visibility = 'visible';
+            }
+          }
         });
         
-        const imgData = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG for smaller size
+        if (!canvas) throw new Error(`第 ${i + 1} 页渲染失败`);
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
         
         if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
       }
       
       const fileName = `麻醉记录单_${data.name || '未命名'}_${data.date}.pdf`;
-      
-      // Try saving directly first as it's more reliable than window.open in iframes
       pdf.save(fileName);
       
     } catch (error) {
       console.error("PDF generation failed:", error);
-      alert("PDF 生成失败，请检查浏览器权限或重试。");
+      alert(`PDF 生成失败: ${error instanceof Error ? error.message : '未知错误'}。请确保浏览器未禁用相关权限并重试。`);
     } finally {
       if (printContainer) {
-        printContainer.style.display = 'none';
-        printContainer.style.visibility = 'hidden';
+        printContainer.setAttribute('style', 'display: none !important;');
       }
       setIsExporting(false);
     }
